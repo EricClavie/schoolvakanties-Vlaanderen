@@ -10,6 +10,8 @@ from uuid import uuid5, NAMESPACE_URL
 SOURCE_URL = "https://www.vlaanderen.be/onderwijs-en-vorming/wat-mag-en-moet-op-school/schoolvakanties-vrije-dagen-en-afwezigheden/schoolvakanties"
 OUTPUT = Path("schoolvakanties_vlaanderen_2026-2030.ics")
 VACATIONS = ("Herfstvakantie", "Kerstvakantie", "Krokusvakantie", "Paasvakantie", "Zomervakantie")
+MIN_START_YEAR = 2026
+MAX_START_YEAR = 2030
 MONTHS = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
     "juli": 7, "augustus": 8, "september": 9, "oktober": 10, "november": 11,
@@ -68,14 +70,15 @@ def extract_events(text):
             y2 = int(y2)
             if y1:
                 y1 = int(y1)
-            elif name == "Zomervakantie":
-                y1 = y2
             else:
-                y1 = start_year
+                # Vlaanderen.be often omits the year on the start date.
+                # Infer it from the end date: Christmas crosses the year boundary;
+                # the other vacation periods normally start in the same calendar year.
+                y1 = y2 - 1 if MONTHS[m1.lower()] > MONTHS[m2.lower()] else y2
             start = parse_date(d1, m1, y1)
             end = parse_date(d2, m2, y2) + timedelta(days=1)
-            events.append((name, start, end))
-    # Deduplicate while preserving chronological order.
+            if MIN_START_YEAR <= start.year <= MAX_START_YEAR:
+                events.append((name, start, end))
     unique = {(name, start, end) for name, start, end in events}
     return sorted(unique, key=lambda x: (x[1], x[0]))
 
@@ -115,8 +118,9 @@ def make_ics(events):
 def main():
     text = page_text()
     events = extract_events(text)
-    if len(events) < 15:
-        raise RuntimeError(f"Only {len(events)} school-vacation events found; refusing to overwrite the ICS file.")
+    expected = (MAX_START_YEAR - MIN_START_YEAR + 1) * len(VACATIONS)
+    if len(events) < expected:
+        raise RuntimeError(f"Only {len(events)} school-vacation events found; expected at least {expected}. Refusing to overwrite the ICS file.")
     content = make_ics(events)
     OUTPUT.write_text(content, encoding="utf-8", newline="")
     print(f"Wrote {len(events)} vacation events to {OUTPUT}")
