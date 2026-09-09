@@ -50,7 +50,6 @@ def parse_date(day, month, year):
 
 
 def extract_events(text):
-    # Each school-year block starts with either 'Schoolvakanties YYYY-YYYY' or 'Schooljaar YYYY-YYYY'.
     heading = re.compile(r"(?:Schoolvakanties|Schooljaar)\s+(\d{4})-(\d{4})")
     headings = list(heading.finditer(text))
     events = []
@@ -58,10 +57,10 @@ def extract_events(text):
         end_pos = headings[i + 1].start() if i + 1 < len(headings) else len(text)
         block = text[h.end():end_pos]
         for name in VACATIONS:
+            # Match only within the same line as the vacation label. This avoids
+            # accidentally consuming dates belonging to another vacation.
             pat = re.compile(
-                rf"{re.escape(name)}:\s+van\s+[^
-]*?(\d{{1,2}})\s+([A-Za-zÀ-ÿ]+)(?:\s+(\d{{4}}))?\s+tot en met\s+[^
-]*?(\d{{1,2}})\s+([A-Za-zÀ-ÿ]+)\s+(\d{{4}})",
+                rf"{re.escape(name)}:\s+van\s+[^\n]*?(\d{{1,2}})\s+([A-Za-zÀ-ÿ]+)(?:\s+(\d{{4}}))?\s+tot en met\s+[^\n]*?(\d{{1,2}})\s+([A-Za-zÀ-ÿ]+)\s+(\d{{4}})",
                 re.IGNORECASE,
             )
             m = pat.search(block)
@@ -72,9 +71,6 @@ def extract_events(text):
             if y1:
                 y1 = int(y1)
             else:
-                # The official page often omits the year on the start date.
-                # Infer it from the end date: Christmas crosses New Year;
-                # the other vacation periods normally start in the same year.
                 y1 = y2 - 1 if MONTHS[m1.lower()] > MONTHS[m2.lower()] else y2
             start = parse_date(d1, m1, y1)
             end = parse_date(d2, m2, y2) + timedelta(days=1)
@@ -121,10 +117,7 @@ def main():
     events = extract_events(text)
     expected = (MAX_START_YEAR - MIN_START_YEAR + 1) * len(VACATIONS)
     if len(events) != expected:
-        raise RuntimeError(
-            f"Found {len(events)} school-vacation events; expected exactly {expected}. "
-            "Refusing to overwrite the ICS file."
-        )
+        raise RuntimeError(f"Found {len(events)} school-vacation events; expected exactly {expected}. Refusing to overwrite the ICS file.")
     content = make_ics(events)
     OUTPUT.write_text(content, encoding="utf-8", newline="")
     print(f"Wrote {len(events)} vacation events to {OUTPUT}")
