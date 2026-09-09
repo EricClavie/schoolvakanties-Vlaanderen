@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '17 4 1 * *'
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'update_schoolvakanties.py'
+      - '.github/workflows/update-calendar.yml'
 
 permissions:
   contents: write
